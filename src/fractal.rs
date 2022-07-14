@@ -1,16 +1,6 @@
-use crate::image_utils::RGB;
+use druid::{kurbo::Circle, Size};
 
-#[derive(Debug)]
-pub struct IPoint {
-    pub x: usize,
-    pub y: usize,
-}
-
-impl IPoint {
-    pub fn default() -> Self {
-        IPoint { x: 0, y: 0 }
-    }
-}
+use crate::image_utils::{FPoint, IPoint, RGB};
 
 pub struct Complex {
     pub r: f64,
@@ -44,6 +34,24 @@ pub fn color_scheme(res: &ConvResult) -> RGB {
     res.b = res.r;
     res.r = b;
     res
+}
+
+pub fn px_to_world(focus: &Circle, px_size: &Size, point: &IPoint) -> FPoint {
+    //
+    let mut xr = point.x as f64 / px_size.width;
+    let mut yr = point.y as f64 / px_size.height;
+    // Now transform back to window
+    xr = (xr * 2. - 1.) * focus.radius;
+    yr = (yr * 2. - 1.) * focus.radius;
+    if px_size.width > px_size.height {
+        xr *= px_size.width / px_size.height;
+    } else {
+        yr *= px_size.height / px_size.width;
+    }
+    FPoint {
+        x: xr + focus.center.x,
+        y: yr + focus.center.y,
+    }
 }
 
 pub fn mandelbrot(c: Complex, escape_radius_sqr: f64, max_iter: usize) -> ConvResult {

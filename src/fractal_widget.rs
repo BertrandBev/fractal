@@ -1,83 +1,35 @@
 use crate::fractal::*;
-use crate::image_utils::RGB;
+use crate::image_utils::{IPoint, RGB};
 use crate::renderer::*;
-use druid::kurbo::Rect;
+use druid::kurbo::{Circle, Rect};
 use druid::piet::{ImageFormat, InterpolationMode};
 use druid::platform_menus::mac::file::print;
 use druid::widget::{prelude::*, Align, Flex};
 use druid::widget::{Label, Slider};
 use druid::{Color, Lens, Point, WidgetExt};
 
+const MAX_RADIUS: f64 = 2.;
+
 #[derive(Clone, Data, Lens)]
 pub struct FractalData {
-    pub center: Point,
-    pub radius: f64,
-    // Selection
+    focus: Circle,
     selection: Rect,
 }
 
 impl FractalData {
     pub fn new() -> Self {
         FractalData {
-            center: Point::new(-0.5, 0.),
-            radius: 2.,
+            focus: Circle {
+                center: Point::new(-0.5, 0.),
+                radius: MAX_RADIUS,
+            },
             selection: Rect::ZERO,
         }
     }
 }
 
-fn px_to_world(data: &FractalData, size: &IPoint, point: &IPoint) -> Point {
-    //
-    let mut xr = point.x as f64 / size.x as f64;
-    let mut yr = point.y as f64 / size.y as f64;
-    // Now transform back to window
-    xr = (xr * 2. - 1.) * data.radius;
-    yr = (yr * 2. - 1.) * data.radius;
-    if size.x > size.y {
-        xr *= size.x as f64 / size.y as f64;
-    } else {
-        yr *= size.y as f64 / size.x as f64;
-    }
-    Point {
-        x: xr + data.center.x,
-        y: yr + data.center.y,
-    }
-}
-
-fn create_fractal(data: &FractalData, size: &IPoint) -> Vec<u8> {
-    let mut image_data = vec![0; size.x * size.y * 4];
-    let mut idx = 0;
-
-    let f = (0.001 + 2.0 * data.radius).sqrt();
-    let max_iter = (223.0 / f).floor() as usize;
-    println!("max_iter: {}", max_iter);
-
-    for y in 0..size.y {
-        for x in 0..size.x {
-            // Iteration counter
-            let world = px_to_world(data, size, &IPoint { x: x, y: y });
-
-            let res = mandelbrot(
-                Complex {
-                    r: world.x,
-                    i: world.y,
-                },
-                100.,
-                max_iter,
-            );
-            let rgb = color_scheme(&res);
-            image_data[idx + 0] = rgb.r;
-            image_data[idx + 1] = rgb.g;
-            image_data[idx + 2] = rgb.b;
-            image_data[idx + 3] = 255;
-            idx += 4;
-        }
-    }
-    image_data
-}
-
 pub struct FractalWidget {
-    size: IPoint,
+    size: Size,
     renderer: Renderer,
     image: Vec<RGB>,
     image_data: Vec<u8>,
@@ -86,8 +38,8 @@ pub struct FractalWidget {
 impl FractalWidget {
     pub fn new() -> Self {
         FractalWidget {
-            size: IPoint::default(),
-            renderer: Renderer::new(4),
+            size: Size::ZERO,
+            renderer: Renderer::new(8),
             image: Vec::new(),
             image_data: Vec::new(),
         }
@@ -120,33 +72,47 @@ impl Widget<FractalData> for FractalWidget {
             Event::MouseUp(mouse) => {
                 ctx.set_active(false);
                 if data.selection.area() < 4. {
-                    return;
+                    // Unzoom
+                    let p0 = px_to_world(
+                        &data.focus,
+                        &self.size,
+                        &IPoint {
+                            x: data.selection.x0 as usize,
+                            y: data.selection.y0 as usize,
+                        },
+                    );
+                    data.focus.center = Point { x: p0.x, y: p0.y };
+                    data.focus.radius = data.focus.radius * 2.;
+                    if data.focus.radius > MAX_RADIUS {
+                        data.focus.radius = MAX_RADIUS;
+                        data.focus.center.x = -0.5;
+                        data.focus.center.y = 0.;
+                    }
+                } else {
+                    // Zoom
+                    let p0 = px_to_world(
+                        &data.focus,
+                        &self.size,
+                        &IPoint {
+                            x: data.selection.x0 as usize,
+                            y: data.selection.y0 as usize,
+                        },
+                    );
+                    let p1 = px_to_world(
+                        &data.focus,
+                        &self.size,
+                        &IPoint {
+                            x: data.selection.x1 as usize,
+                            y: data.selection.y1 as usize,
+                        },
+                    );
+                    data.focus.center = Point {
+                        x: (p0.x + p1.x) / 2.,
+                        y: (p0.y + p1.y) / 2.,
+                    };
+                    data.focus.radius = (p0.x - p1.x).abs().min((p0.y - p1.y).abs()) / 2.;
                 }
 
-                let p0 = px_to_world(
-                    data,
-                    &self.size,
-                    &IPoint {
-                        x: data.selection.x0 as usize,
-                        y: data.selection.y0 as usize,
-                    },
-                );
-                let p1 = px_to_world(
-                    data,
-                    &self.size,
-                    &IPoint {
-                        x: data.selection.x1 as usize,
-                        y: data.selection.y1 as usize,
-                    },
-                );
-                data.center = Point {
-                    x: (p0.x + p1.x) / 2.,
-                    y: (p0.y + p1.y) / 2.,
-                };
-                data.radius = (p0.x - p1.x).abs().min((p0.y - p1.y).abs());
-
-                // data.center = world;
-                // data.radius = data.radius / 2.;
                 ctx.request_paint();
             }
             Event::AnimFrame(interval) => {
@@ -169,6 +135,9 @@ impl Widget<FractalData> for FractalWidget {
             LifeCycle::WidgetAdded => {
                 ctx.request_anim_frame();
             }
+            LifeCycle::Size(_) => {
+                self.image.fill(RGB::TRANSPARENT);
+            }
             _ => {}
         }
     }
@@ -180,7 +149,6 @@ impl Widget<FractalData> for FractalWidget {
         _data: &FractalData,
         _env: &Env,
     ) {
-        println!("update!");
     }
 
     fn layout(
@@ -191,11 +159,8 @@ impl Widget<FractalData> for FractalWidget {
         _env: &Env,
     ) -> Size {
         let default_size = Size::new(512., 512.);
-        let size = bc.constrain(default_size);
-        self.size.x = size.width as usize;
-        self.size.y = size.height as usize;
-        // dbg!(size);
-        size
+        self.size = bc.constrain(default_size);
+        self.size
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &FractalData, _env: &Env) {
@@ -206,15 +171,18 @@ impl Widget<FractalData> for FractalWidget {
         // self.image_data = create_fractal(data, &self.size);
         // let (w, h) = (ctx.size().width as usize, ctx.size().height as usize);
 
-        // Get image
-        let region = Rect::ZERO;
-        self.renderer.resize(ctx.size(), region);
-        let (w, h) = self.renderer.get_image(&mut self.image);
+        self.renderer.resize(ctx.size(), data.focus);
+        let result = self.renderer.update(&mut self.image);
 
         if !self.image.is_empty() {
             RGB::create_image_data(&self.image, &mut self.image_data);
             let image = ctx
-                .make_image(w, h, &self.image_data, ImageFormat::RgbaSeparate)
+                .make_image(
+                    result.image_size.x,
+                    result.image_size.y,
+                    &self.image_data,
+                    ImageFormat::RgbaSeparate,
+                )
                 .unwrap();
             let size = ctx.size();
             ctx.draw_image(

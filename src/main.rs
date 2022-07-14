@@ -4,12 +4,13 @@ mod fractal_widget;
 mod image_utils;
 mod renderer;
 
-use std::f64::consts::PI;
+use color_picker::{color_picker, HSL};
 use druid::kurbo::{Circle, Line, Rect};
 use druid::widget::{prelude::*, Label};
 use druid::{AppLauncher, Color, LocalizedString, Point, Vec2, WindowDesc};
-use color_picker::{color_picker, HSL};
 use fractal_widget::{FractalData, FractalWidget};
+use image_utils::{IPoint, RGB};
+use std::f64::consts::PI;
 
 struct AnimWidget {
     t: f64,
@@ -62,8 +63,10 @@ impl Widget<()> for AnimWidget {
 }
 
 pub fn main() {
+    // RGB::resize_image(&[], IPoint::default(), &mut Vec::new(), IPoint::new(3, 2));
     let window = WindowDesc::new(FractalWidget::new())
         .title("Fractal renderer")
+        // .window_size((512., 256.));
         .window_size((512., 512.));
     // let data = HSL::new();
     AppLauncher::with_window(window)

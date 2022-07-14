@@ -1,4 +1,44 @@
+use druid::{platform_menus::mac::file::print, Size};
 use rand::Rng;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Point<T> {
+    pub x: T,
+    pub y: T,
+}
+
+impl<T> Point<T> {
+    pub fn new(x: T, y: T) -> Self {
+        Point { x: x, y: y }
+    }
+}
+
+pub type IPoint = Point<usize>;
+pub type FPoint = Point<f64>;
+
+impl IPoint {
+    pub fn default() -> Self {
+        IPoint { x: 0, y: 0 }
+    }
+}
+
+impl From<FPoint> for IPoint {
+    fn from(p: FPoint) -> Self {
+        IPoint::new(p.x as usize, p.y as usize)
+    }
+}
+
+impl FPoint {
+    pub fn default() -> Self {
+        FPoint { x: 0., y: 0. }
+    }
+}
+
+impl From<IPoint> for FPoint {
+    fn from(p: IPoint) -> Self {
+        FPoint::new(p.x as f64, p.y as f64)
+    }
+}
 
 #[derive(Clone, Debug, Copy)]
 pub struct RGB {
@@ -81,6 +121,37 @@ impl RGB {
         }
     }
 
+    pub fn resize_image(src: &[RGB], src_size: &IPoint, dst: &mut Vec<RGB>, dst_size: &IPoint) {
+        assert!(src.len() == src_size.x * src_size.y);
+        dst.resize(dst_size.x * dst_size.y, RGB::TRANSPARENT);
+        let src_sizef: FPoint = (*src_size).into();
+        let dst_sizef: FPoint = (*dst_size).into();
+        // Resize ratio
+        let mut r = src_sizef.x;
+        let yd = -dst_sizef.y / 2. / dst_sizef.x;
+        if yd * r + src_sizef.y / 2. < 0. {
+            r = src_sizef.y * dst_sizef.x / dst_sizef.y;
+        }
+
+        for y in 0..dst_size.y {
+            for x in 0..dst_size.x {
+                let xd = (x as f64 - dst_sizef.x / 2.) / dst_sizef.x;
+                let yd = (y as f64 - dst_sizef.y / 2.) / dst_sizef.x;
+                let xs = (xd * r + src_sizef.x / 2.)
+                    .floor()
+                    .clamp(0., src_sizef.x - 1.);
+                let ys = (yd * r + src_sizef.y / 2.)
+                    .floor()
+                    .clamp(0., src_sizef.y - 1.);
+                let idxd = x + dst_size.x * y;
+                let idxs = xs as usize + src_size.x * ys as usize;
+                dst[idxd] = src[idxs];
+            }
+        }
+
+        println!("sizes: ({:?},{:?})", src_size, dst_size);
+    }
+
     pub fn create_image_data(src: &[RGB], dst: &mut Vec<u8>) {
         dst.resize(src.len() * 4, 0);
         for k in 0..src.len() {
@@ -90,10 +161,5 @@ impl RGB {
             dst[k * 4 + 2] = rgb.b;
             dst[k * 4 + 3] = rgb.a;
         }
-    }
-
-    
-    pub fn resize_image() {
-        
     }
 }
