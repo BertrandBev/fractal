@@ -3,68 +3,30 @@ mod fractal;
 mod fractal_widget;
 mod image_utils;
 mod renderer;
+mod stack_widget;
 
-use color_picker::{color_picker, HSL};
-use druid::kurbo::{Circle, Line, Rect};
-use druid::widget::{prelude::*, Label};
-use druid::{AppLauncher, Color, LocalizedString, Point, Vec2, WindowDesc};
+use druid::{
+    widget::{Button, SizedBox},
+    AppLauncher, Widget, WidgetExt, WindowDesc,
+};
 use fractal_widget::{FractalData, FractalWidget};
-use image_utils::{IPoint, RGB};
-use std::f64::consts::PI;
+use stack_widget::{StackAlign, StackWidget};
 
-struct AnimWidget {
-    t: f64,
-}
+pub fn build_gui() -> impl Widget<FractalData> {
+    let fractal_widget = FractalWidget::new();
 
-impl Widget<()> for AnimWidget {
-    fn event(&mut self, ctx: &mut EventCtx, event: &Event, _data: &mut (), _env: &Env) {
-        match event {
-            Event::MouseDown(_) => {
-                self.t = 0.0;
-                ctx.request_anim_frame();
-            }
-            Event::AnimFrame(interval) => {
-                ctx.request_paint();
-                self.t += f64::min(*interval as f64, 5e7) * 1e-9;
-                if self.t < 1.0 {
-                    ctx.request_anim_frame();
-                } else {
-                    self.t = 0.0;
-                }
-            }
-            _ => (),
-        }
-    }
+    let button = Button::<FractalData>::new("increment").padding(5.0).align_right();
+    // let sized = SizedBox::new(button).width(128.).height(64.);
 
-    fn lifecycle(&mut self, _ctx: &mut LifeCycleCtx, _event: &LifeCycle, _data: &(), _env: &Env) {}
-
-    fn update(&mut self, _ctx: &mut UpdateCtx, _old_data: &(), _data: &(), _env: &Env) {}
-
-    fn layout(
-        &mut self,
-        _layout_ctx: &mut LayoutCtx,
-        bc: &BoxConstraints,
-        _data: &(),
-        _env: &Env,
-    ) -> Size {
-        bc.constrain((100.0, 100.0))
-    }
-
-    fn paint(&mut self, ctx: &mut PaintCtx, _data: &(), _env: &Env) {
-        let t = self.t;
-        let center = Point::new(50.0, 50.0);
-        ctx.paint_with_z_index(1, move |ctx| {
-            let ambit = center + 45.0 * Vec2::from_angle((0.75 + t) * 2.0 * PI);
-            ctx.stroke(Line::new(center, ambit), &Color::WHITE, 1.0);
-        });
-
-        ctx.fill(Circle::new(center, 50.0), &Color::BLACK);
-    }
+    let widget = StackWidget::new()
+        .with_child(fractal_widget, StackAlign::TopLeft)
+        .with_child(button, StackAlign::BottomCenter);
+    widget
 }
 
 pub fn main() {
     // RGB::resize_image(&[], IPoint::default(), &mut Vec::new(), IPoint::new(3, 2));
-    let window = WindowDesc::new(FractalWidget::new())
+    let window = WindowDesc::new(build_gui())
         .title("Fractal renderer")
         // .window_size((512., 256.));
         .window_size((512., 512.));

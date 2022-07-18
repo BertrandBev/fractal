@@ -112,7 +112,8 @@ impl Widget<FractalData> for FractalWidget {
                     };
                     data.focus.radius = (p0.x - p1.x).abs().min((p0.y - p1.y).abs()) / 2.;
                 }
-
+                // Clear image
+                self.image.fill(RGB::TRANSPARENT);
                 ctx.request_paint();
             }
             Event::AnimFrame(interval) => {
@@ -173,6 +174,7 @@ impl Widget<FractalData> for FractalWidget {
 
         self.renderer.resize(ctx.size(), data.focus);
         let result = self.renderer.update(&mut self.image);
+        println!("progress: {}", result.progress);
 
         if !self.image.is_empty() {
             RGB::create_image_data(&self.image, &mut self.image_data);

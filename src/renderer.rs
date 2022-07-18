@@ -47,12 +47,13 @@ struct ThreadData {
 
 struct RendererThread {
     // State
+    thread_count: usize,
     thread: Option<thread::JoinHandle<()>>,
     data: Arc<Mutex<ThreadData>>,
 }
 
 impl RendererThread {
-    fn new(id: usize) -> Self {
+    fn new(id: usize, thread_count: usize) -> Self {
         let buf: [Vec<RGB>; STAGES] = Default::default();
         let data = Arc::new(Mutex::new(ThreadData {
             id: id,
@@ -62,6 +63,7 @@ impl RendererThread {
             buffers: buf,
         }));
         RendererThread {
+            thread_count: thread_count,
             thread: None,
             data: data,
         }
@@ -187,13 +189,13 @@ impl RendererThread {
         let mut total_pixels = 0;
         let mut done = 0;
         for s in 0..STAGES {
-            let size = Self::stage_size(&data.input.size, stage);
+            let size = Self::stage_size(&data.input.size, s);
             let px = size.x * size.y;
             total_pixels += px;
             if s < data.input.stage {
                 done += px;
-            } else {
-                done = data.batch_idx * BATCH;
+            } else if s == data.input.stage {
+                done += (data.batch_idx * BATCH * self.thread_count).min(px);
             }
         }
         let progress = (done as f64 / total_pixels as f64).min(1.);
@@ -214,7 +216,7 @@ impl RendererThread {
                 break;
             }
             let stage = data.input.stage;
-            let idx = (STAGES * batch_idx + data.id) * BATCH;
+            let idx = (self.thread_count * batch_idx + data.id) * BATCH;
             let buffer = &mut data.buffers[stage];
             let idx_end = (idx + BATCH).min(image.len());
             if idx_end < idx {
@@ -250,7 +252,7 @@ impl Renderer {
         // Create threads
         let mut threads: Vec<RendererThread> = Vec::new();
         for id in 0..thread_count {
-            let mut thread = RendererThread::new(id);
+            let mut thread = RendererThread::new(id, thread_count);
             thread.start();
             threads.push(thread);
         }
@@ -283,11 +285,15 @@ impl Renderer {
         // Resize image if needed
         let mut size = RendererThread::stage_size(&self.size, self.stage);
         image.resize(size.x * size.y, RGB::TRANSPARENT);
-        // Advance the stage if needed
+        // Retrieve image if needed
+        for thread in self.threads.iter_mut() {
+            thread.populate_image(image);
+        }
+        // Update progress
+        let thread_count = self.threads.len();
+        let mut complete_count = 0;
         let mut mean_progress = 0.;
-        if self.stage < STAGES - 1 {
-            let mut complete_count = 0;
-            let thread_count = self.threads.len();
+        if self.stage <= STAGES - 1 {
             for thread in self.threads.iter_mut() {
                 let (complete, progress) = thread.status(self.stage);
                 mean_progress += progress / thread_count as f64;
@@ -295,6 +301,12 @@ impl Renderer {
                     complete_count += 1;
                 }
             }
+        } else {
+            // Rendering done!
+            mean_progress = 1.;
+        }
+        // Advance the stage if needed
+        if self.stage < STAGES - 1 {
             if complete_count == thread_count {
                 self.stage += 1;
                 for thread in self.threads.iter_mut() {
@@ -307,10 +319,7 @@ impl Renderer {
                 RGB::resize_image(&old_image, &old_size, image, &size);
             }
         }
-        // Retrieve images
-        for thread in self.threads.iter_mut() {
-            thread.populate_image(image);
-        }
+
         RendererResult {
             image_size: size,
             progress: mean_progress,
