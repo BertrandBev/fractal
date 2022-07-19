@@ -8,3 +8,10 @@ edition = "2021"
 [dependencies]
 druid = { git = "https://github.com/linebender/druid.git" }
 rand = "0.8.5"
+getrandom = { version = "0.2.7", features = ["js"] }
+wasm-bindgen = "0.2.67"
+console_error_panic_hook = "0.1.6"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/main.rs"

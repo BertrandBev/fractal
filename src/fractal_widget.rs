@@ -39,7 +39,7 @@ impl FractalWidget {
     pub fn new() -> Self {
         FractalWidget {
             size: Size::ZERO,
-            renderer: Renderer::new(8),
+            renderer: Renderer::new(),
             image: Vec::new(),
             image_data: Vec::new(),
         }
@@ -174,7 +174,7 @@ impl Widget<FractalData> for FractalWidget {
 
         self.renderer.resize(ctx.size(), data.focus);
         let result = self.renderer.update(&mut self.image);
-        println!("progress: {}", result.progress);
+        // println!("progress: {}", result.progress);
 
         if !self.image.is_empty() {
             RGB::create_image_data(&self.image, &mut self.image_data);

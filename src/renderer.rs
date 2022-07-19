@@ -92,78 +92,87 @@ impl RendererThread {
     }
 
     fn start(&mut self) {
-        let data = Arc::clone(&self.data);
-        let thread = thread::spawn(move || loop {
-            // Simulate sleep
-            // thread::sleep(Duration::from_millis(50));
-            // Retreive data in a scope
-            let (size, batch_idx, id): (IPoint, usize, usize);
-            let input: Input;
-            let mut complete: bool;
-            {
-                let data = data.lock().unwrap();
-                if data.input.quit {
+        if self.thread_count > 1 {
+            let data = Arc::clone(&self.data);
+            let thread = thread::spawn(move || loop {
+                if Self::thread_loop(&data) {
                     break;
                 }
-                (batch_idx, id, complete) = (data.batch_idx, data.id, data.complete);
-                input = data.input;
-                size = Self::current_size(&data);
-            }
-            // Skip if complete
-            if complete {
-                continue;
-            }
-            // Process a batch of items
-            let idx = (STAGES * batch_idx + id) * BATCH;
-            complete = idx >= size.x * size.y;
-            let mut buf = [RGB::TRANSPARENT; BATCH];
-            if !complete {
-                // Process buffer
-                for k in 0..BATCH {
-                    let idx = idx + k;
-                    let (x, y) = (idx % size.x, idx / size.x);
+            });
+            self.thread = Some(thread);
+        }
+    }
 
-                    // TODO: tune
-                    let f = (0.001 + 2.0 * input.focus.radius).sqrt();
-                    let max_iter = (223.0 / f).floor() as usize;
-
-                    let size = Size::new(size.x as f64, size.y as f64);
-                    let world = px_to_world(&input.focus, &size, &IPoint { x: x, y: y });
-                    let res = mandelbrot(
-                        Complex {
-                            r: world.x,
-                            i: world.y,
-                        },
-                        100.,
-                        max_iter,
-                    );
-                    let rgb = color_scheme(&res);
-                    buf[k] = rgb;
-
-                    // let x = x - size.x / 2;
-                    // let y = y - size.y / 2;
-                    // if (x * x + y * y) < size.y * size.y / 5 {
-                    //     // if y < size.y / 2 && x < size.x /  2{
-                    //     buf[k] = RGB::rand();
-                    // }
-
-                    // buf[k] = RGB::rand()
-                }
+    fn thread_loop(data: &Arc<Mutex<ThreadData>>) -> bool {
+        // Simulate sleep
+        // thread::sleep(Duration::from_millis(50));
+        // Retreive data in a scope
+        let (size, batch_idx, id): (IPoint, usize, usize);
+        let input: Input;
+        let mut complete: bool;
+        {
+            let data = data.lock().unwrap();
+            if data.input.quit {
+                return true;
             }
-            // Now append that batch
-            {
-                let mut data = data.lock().unwrap();
-                data.complete = complete;
-                if !complete && Self::current_size(&data) == size {
-                    let stage = data.input.stage;
-                    let buffer = &mut data.buffers[stage];
-                    let slice = &mut buffer[batch_idx * BATCH..(batch_idx + 1) * BATCH];
-                    slice.copy_from_slice(&buf);
-                    data.batch_idx += 1;
-                }
+            (batch_idx, id, complete) = (data.batch_idx, data.id, data.complete);
+            input = data.input;
+            size = Self::current_size(&data);
+        }
+        // Skip if complete
+        if complete {
+            return false;
+        }
+        // Process a batch of items
+        let idx = (STAGES * batch_idx + id) * BATCH;
+        complete = idx >= size.x * size.y;
+        let mut buf = [RGB::TRANSPARENT; BATCH];
+        if !complete {
+            // Process buffer
+            for k in 0..BATCH {
+                let idx = idx + k;
+                let (x, y) = (idx % size.x, idx / size.x);
+
+                // TODO: tune
+                let f = (0.001 + 2.0 * input.focus.radius).sqrt();
+                let max_iter = (223.0 / f).floor() as usize;
+
+                let size = Size::new(size.x as f64, size.y as f64);
+                let world = px_to_world(&input.focus, &size, &IPoint { x: x, y: y });
+                let res = mandelbrot(
+                    Complex {
+                        r: world.x,
+                        i: world.y,
+                    },
+                    100.,
+                    max_iter,
+                );
+                let rgb = color_scheme(&res);
+                buf[k] = rgb;
+
+                // let x = x - size.x / 2;
+                // let y = y - size.y / 2;
+                // if (x * x + y * y) < size.y * size.y / 5 {
+                //     // if y < size.y / 2 && x < size.x /  2{
+                //     buf[k] = RGB::rand();
+                // }
+
+                // buf[k] = RGB::rand()
             }
-        });
-        self.thread = Some(thread);
+        }
+        // Now append that batch
+        {
+            let mut data = data.lock().unwrap();
+            data.complete = complete;
+            if !complete && Self::current_size(&data) == size {
+                let stage = data.input.stage;
+                let buffer = &mut data.buffers[stage];
+                let slice = &mut buffer[batch_idx * BATCH..(batch_idx + 1) * BATCH];
+                slice.copy_from_slice(&buf);
+                data.batch_idx += 1;
+            }
+        }
+        false
     }
 
     fn stop(&mut self) {
@@ -203,6 +212,12 @@ impl RendererThread {
     }
 
     fn populate_image(&self, image: &mut [RGB]) {
+        // Run a fixed number of loops if thread hasn't started
+        if self.thread.is_none() {
+            Self::thread_loop(&self.data);
+        }
+
+        // Populate image
         let mut data = self.data.lock().unwrap();
         let size = Self::current_size(&data);
         // println!("w {} h {}", w, h);
@@ -248,7 +263,8 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(thread_count: usize) -> Self {
+    pub fn new() -> Self {
+        let thread_count = 8;
         // Create threads
         let mut threads: Vec<RendererThread> = Vec::new();
         for id in 0..thread_count {
