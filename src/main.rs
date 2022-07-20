@@ -4,6 +4,7 @@ mod fractal_widget;
 mod image_utils;
 mod renderer;
 mod stack_widget;
+mod time;
 use wasm_bindgen::prelude::*;
 
 use druid::{

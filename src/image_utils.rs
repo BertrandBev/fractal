@@ -148,8 +148,6 @@ impl RGB {
                 dst[idxd] = src[idxs];
             }
         }
-
-        println!("sizes: ({:?},{:?})", src_size, dst_size);
     }
 
     pub fn create_image_data(src: &[RGB], dst: &mut Vec<u8>) {

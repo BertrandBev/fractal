@@ -1,10 +1,10 @@
 use crate::fractal::*;
 use crate::image_utils::{IPoint, RGB};
+use crate::time::Instant;
 use druid::kurbo::Circle;
-use druid::{Point, Rect, Size};
+use druid::{Point, Size};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 const STAGES: usize = 4;
 const BATCH: usize = 100;
@@ -80,22 +80,23 @@ impl RendererThread {
         Self::stage_size(&data.input.size, data.input.stage)
     }
 
-    fn buffer_length(data: &ThreadData) -> usize {
+    fn buffer_length(data: &ThreadData, thread_count: usize) -> usize {
         let size = Self::current_size(data);
-        size.x * size.y / STAGES + BATCH
+        size.x * size.y / thread_count + BATCH
     }
 
-    fn init_buffer(data: &mut ThreadData) {
-        let size = Self::buffer_length(data);
+    fn init_buffer(data: &mut ThreadData, thread_count: usize) {
+        let size = Self::buffer_length(data, thread_count);
         data.buffers[data.input.stage].resize(size, RGB::TRANSPARENT);
         data.buffers[data.input.stage].fill(RGB::TRANSPARENT);
     }
 
     fn start(&mut self) {
-        if self.thread_count > 1 {
+        let thread_count = self.thread_count;
+        if thread_count > 1 {
             let data = Arc::clone(&self.data);
             let thread = thread::spawn(move || loop {
-                if Self::thread_loop(&data) {
+                if Self::thread_loop(&data, thread_count) {
                     break;
                 }
             });
@@ -103,7 +104,7 @@ impl RendererThread {
         }
     }
 
-    fn thread_loop(data: &Arc<Mutex<ThreadData>>) -> bool {
+    fn thread_loop(data: &Arc<Mutex<ThreadData>>, thread_count: usize) -> bool {
         // Simulate sleep
         // thread::sleep(Duration::from_millis(50));
         // Retreive data in a scope
@@ -124,7 +125,7 @@ impl RendererThread {
             return false;
         }
         // Process a batch of items
-        let idx = (STAGES * batch_idx + id) * BATCH;
+        let idx = (thread_count * batch_idx + id) * BATCH;
         complete = idx >= size.x * size.y;
         let mut buf = [RGB::TRANSPARENT; BATCH];
         if !complete {
@@ -190,7 +191,7 @@ impl RendererThread {
         data.input.stage = stage;
         data.complete = false;
         data.batch_idx = 0;
-        Self::init_buffer(&mut data);
+        Self::init_buffer(&mut data, self.thread_count);
     }
 
     fn status(&self, stage: usize) -> (bool, f64) {
@@ -214,7 +215,14 @@ impl RendererThread {
     fn populate_image(&self, image: &mut [RGB]) {
         // Run a fixed number of loops if thread hasn't started
         if self.thread.is_none() {
-            Self::thread_loop(&self.data);
+            let start = Instant::now();
+            loop {
+                Self::thread_loop(&self.data, self.thread_count);
+                let elapsed = start.elapsed().as_millis();
+                if elapsed > 30 {
+                    break;
+                }
+            }
         }
 
         // Populate image
@@ -226,10 +234,7 @@ impl RendererThread {
             return;
         }
         let mut batch_idx = 0;
-        loop {
-            if batch_idx >= data.batch_idx {
-                break;
-            }
+        while (batch_idx < data.batch_idx) {
             let stage = data.input.stage;
             let idx = (self.thread_count * batch_idx + data.id) * BATCH;
             let buffer = &mut data.buffers[stage];
@@ -264,7 +269,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new() -> Self {
-        let thread_count = 8;
+        let thread_count = 1;
         // Create threads
         let mut threads: Vec<RendererThread> = Vec::new();
         for id in 0..thread_count {
@@ -300,6 +305,7 @@ impl Renderer {
     pub fn update(&mut self, image: &mut Vec<RGB>) -> RendererResult {
         // Resize image if needed
         let mut size = RendererThread::stage_size(&self.size, self.stage);
+        // println!("{:?}", size);
         image.resize(size.x * size.y, RGB::TRANSPARENT);
         // Retrieve image if needed
         for thread in self.threads.iter_mut() {
