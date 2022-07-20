@@ -1,12 +1,11 @@
 use crate::fractal::*;
 use crate::image_utils::{IPoint, RGB};
-use crate::renderer::*;
+use crate::renderer::Renderer;
 use druid::kurbo::{Circle, Rect};
 use druid::piet::{ImageFormat, InterpolationMode};
 use druid::platform_menus::mac::file::print;
-use druid::widget::{prelude::*, Align, Flex};
-use druid::widget::{Label, Slider};
-use druid::{Color, Lens, Point, WidgetExt};
+use druid::widget::prelude::*;
+use druid::{Code, Color, Key, Lens, MouseButton, Point};
 
 const MAX_RADIUS: f64 = 2.;
 
@@ -14,17 +13,76 @@ const MAX_RADIUS: f64 = 2.;
 pub struct FractalData {
     focus: Circle,
     selection: Rect,
+    progress: f64,
 }
 
 impl FractalData {
     pub fn new() -> Self {
-        FractalData {
-            focus: Circle {
-                center: Point::new(-0.5, 0.),
-                radius: MAX_RADIUS,
-            },
+        let mut instance = FractalData {
+            focus: Circle::new(Point::ZERO, 0.),
             selection: Rect::ZERO,
+            progress: 0.,
+        };
+        instance.zoom_reset();
+        instance
+    }
+
+    fn clip_zoom(&mut self) {
+        if self.focus.radius > MAX_RADIUS {
+            self.focus.radius = MAX_RADIUS;
+            self.focus.center.x = -0.5;
+            self.focus.center.y = 0.;
         }
+    }
+
+    pub fn zoom_reset(&mut self) {
+        self.focus = Circle {
+            center: Point::new(-0.5, 0.),
+            radius: MAX_RADIUS,
+        };
+        self.selection = Rect::ZERO;
+    }
+
+    pub fn zoom_center(&mut self, factor: f64) {
+        self.focus.radius = self.focus.radius / factor;
+        self.clip_zoom();
+    }
+
+    pub fn zoom_point(&mut self, size: &Size, point: &IPoint, factor: f64) {
+        // Unzoom
+        let p0 = px_to_world(&self.focus, size, point);
+        self.focus.center = Point { x: p0.x, y: p0.y };
+        self.focus.radius = self.focus.radius / factor;
+        self.clip_zoom();
+    }
+
+    pub fn zoom_rect(&mut self, size: &Size, selection: Rect) {
+        // Zoom
+        let p0 = px_to_world(
+            &self.focus,
+            size,
+            &IPoint {
+                x: selection.x0 as usize,
+                y: selection.y0 as usize,
+            },
+        );
+        let p1 = px_to_world(
+            &self.focus,
+            size,
+            &IPoint {
+                x: selection.x1 as usize,
+                y: selection.y1 as usize,
+            },
+        );
+        self.focus.center = Point {
+            x: (p0.x + p1.x) / 2.,
+            y: (p0.y + p1.y) / 2.,
+        };
+        self.focus.radius = (p0.x - p1.x).abs().min((p0.y - p1.y).abs()) / 2.;
+    }
+
+    pub fn zoom_factor_str(&self) -> String {
+        format!("{}x", (MAX_RADIUS / self.focus.radius).round())
     }
 }
 
@@ -33,6 +91,8 @@ pub struct FractalWidget {
     renderer: Renderer,
     image: Vec<RGB>,
     image_data: Vec<u8>,
+    progress: f64,
+    drag_center: Option<Point>,
 }
 
 impl FractalWidget {
@@ -42,6 +102,8 @@ impl FractalWidget {
             renderer: Renderer::new(),
             image: Vec::new(),
             image_data: Vec::new(),
+            progress: 0.,
+            drag_center: None,
         }
     }
 }
@@ -50,11 +112,6 @@ impl Widget<FractalData> for FractalWidget {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut FractalData, _env: &Env) {
         match event {
             Event::MouseDown(mouse) => {
-                // // TEMP
-                // println!("Stopping...");
-                // self.renderer.stop();
-                // println!("Stopped!");
-                // //
                 ctx.set_active(true);
                 data.selection.x0 = mouse.pos.x;
                 data.selection.y0 = mouse.pos.y;
@@ -62,61 +119,61 @@ impl Widget<FractalData> for FractalWidget {
                 data.selection.y1 = mouse.pos.y;
                 ctx.request_paint();
             }
+            Event::KeyDown(key_event) => {
+                println!("key event {:?}", key_event);
+                if key_event.code == Code::ShiftLeft || key_event.code == Code::ShiftRight {
+                    println!("set drag center");
+                    self.drag_center = Option::Some(data.focus.center);
+                }
+            }
             Event::MouseMove(mouse) => {
                 if ctx.is_active() {
+                    if let Some(center) = self.drag_center {
+                        let p0 = IPoint {
+                            x: data.selection.x0 as usize,
+                            y: data.selection.y0 as usize,
+                        };
+                        let p1 = IPoint {
+                            x: data.selection.x1 as usize,
+                            y: data.selection.y1 as usize,
+                        };
+                        let w0 = px_to_world(&data.focus, &ctx.size(), &p0);
+                        let w1 = px_to_world(&data.focus, &ctx.size(), &p1);
+
+                        data.focus.center = Point {
+                            x: center.x - w1.x + w0.x,
+                            y: center.y - w1.y + w0.y,
+                        };
+                    }
                     data.selection.x1 = mouse.pos.x;
                     data.selection.y1 = mouse.pos.y;
                     ctx.request_paint();
                 }
             }
-            Event::MouseUp(mouse) => {
+            Event::MouseUp(_mouse) => {
                 ctx.set_active(false);
-                if data.selection.area() < 4. {
-                    // Unzoom
-                    let p0 = px_to_world(
-                        &data.focus,
-                        &self.size,
-                        &IPoint {
+                if self.drag_center.is_none() {
+                    // Update selection
+                    if data.selection.area() < 4. {
+                        let point = IPoint {
                             x: data.selection.x0 as usize,
                             y: data.selection.y0 as usize,
-                        },
-                    );
-                    data.focus.center = Point { x: p0.x, y: p0.y };
-                    data.focus.radius = data.focus.radius * 2.;
-                    if data.focus.radius > MAX_RADIUS {
-                        data.focus.radius = MAX_RADIUS;
-                        data.focus.center.x = -0.5;
-                        data.focus.center.y = 0.;
+                        };
+                        data.zoom_point(&self.size, &point, 0.5);
+                    } else {
+                        data.zoom_rect(&self.size, data.selection);
                     }
-                } else {
-                    // Zoom
-                    let p0 = px_to_world(
-                        &data.focus,
-                        &self.size,
-                        &IPoint {
-                            x: data.selection.x0 as usize,
-                            y: data.selection.y0 as usize,
-                        },
-                    );
-                    let p1 = px_to_world(
-                        &data.focus,
-                        &self.size,
-                        &IPoint {
-                            x: data.selection.x1 as usize,
-                            y: data.selection.y1 as usize,
-                        },
-                    );
-                    data.focus.center = Point {
-                        x: (p0.x + p1.x) / 2.,
-                        y: (p0.y + p1.y) / 2.,
-                    };
-                    data.focus.radius = (p0.x - p1.x).abs().min((p0.y - p1.y).abs()) / 2.;
                 }
+                // Cancel drag
+                println!("clear drag center");
+                self.drag_center = None;
                 // Clear image
                 self.image.fill(RGB::TRANSPARENT);
                 ctx.request_paint();
             }
-            Event::AnimFrame(interval) => {
+            Event::AnimFrame(_interval) => {
+                // Populate progress
+                data.progress = self.progress;
                 // Anim frame requested
                 ctx.request_anim_frame();
                 ctx.request_paint();
@@ -159,22 +216,15 @@ impl Widget<FractalData> for FractalWidget {
         _data: &FractalData,
         _env: &Env,
     ) -> Size {
-        let default_size = Size::new(512., 512.);
-        self.size = bc.constrain(default_size);
+        self.size = bc.max();
         self.size
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &FractalData, _env: &Env) {
         // Render fractal
-        // self.size =
-        // self.size.x = ctx.size().width as usize;
-        // self.size.y = ctx.size().height as usize;
-        // self.image_data = create_fractal(data, &self.size);
-        // let (w, h) = (ctx.size().width as usize, ctx.size().height as usize);
-
         self.renderer.resize(ctx.size(), data.focus);
         let result = self.renderer.update(&mut self.image);
-        // println!("progress: {}", result.progress);
+        self.progress = result.progress;
 
         if !self.image.is_empty() {
             RGB::create_image_data(&self.image, &mut self.image_data);
@@ -195,7 +245,7 @@ impl Widget<FractalData> for FractalWidget {
         }
 
         // Draw selection
-        if ctx.is_active() {
+        if ctx.is_active() && self.drag_center.is_none() {
             let stroke_color = Color::WHITE;
             let fill_color = Color::BLACK.with_alpha(0.2);
             ctx.fill(data.selection, &fill_color);
