@@ -8,6 +8,18 @@ A multithreaded fractal renderer in Rust
 
 <img src="https://raw.githubusercontent.com/BertrandBev/fractal/master/doc/images/demo.gif" width="100%">
 
+## Online release
+
+The live wasm-compiled release is accessible [here](https://bertrandbev.github.io/fractal/). Due to some rust wasm compiler limitations, that web version is single threaded and therefore slower than native desktop 
+
+## How to run
+
+Navigate to the cloned folder and execute
+
+```bash
+cargo run --release
+```
+
 ## the Mandelbrot set
 
 The [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) is the set of complex numbers $c$ for which the iterated sequence $z_{n + 1} = z_{n^2} + c; z_0 = 0$ does not diverge in modulus to infinity, i.e. remains bounded.
@@ -18,11 +30,9 @@ Computationally, for every pixel of the rendering area, the above equation is it
 
 Multiple optimisations can be implemented to speed up the sequence interation. Choosing $z = x + i y$ and $c = x_0 + i y_0$, we can expand
 
-$$
-z^2 = x^2 - y^2 + 2 i x y
-x = Re(x^2 + c) = x^2 - y^2 + x_0
-y = Im(x^2 + c) = 2 x y + y_0
-$$
+$$z^2 = x^2 - y^2 + 2 i x y$$
+$$x = Re(x^2 + c) = x^2 - y^2 + x_0$$
+$$y = Im(x^2 + c) = 2 x y + y_0$$
 
 Further, we can pre-compute $z^2$ since it will be used in both the iterations and the exit condition checks. A pixel iteration can then be written that way
 
@@ -48,7 +58,7 @@ loop {
 
 ## Mutlistage multithreaded renderer
 
-For deep zoom levels, the number of iterations has to be increased to maintain an appropriate level of details, which makes for slower rendering time and reduces the exploration smoothness. Multistage rendering works by splitting up a rendering task in $n$ stages, each of which doubles the rendering area up to the screen size. The time required to render the $n-th$ stage is $\frac^1_{2^n}$ the time it takes to render the full screen size. Since $\sum_{k=1}^\inf \frac^1_{2^k} = 1$, regardless of the number of stages, the rendering time is bounded to double the rendering time of the final stage.
+For deep zoom levels, the number of iterations has to be increased to maintain an appropriate level of details, which makes for slower rendering time and reduces the exploration smoothness. Multistage rendering works by splitting up a rendering task in $n$ stages, each of which doubles the rendering area up to the screen size. The time required to render the $n^{th}$ stage is $\frac{1}{2^n}$ the time it takes to render the full screen size. Since $\sum_{k=1}^{\inf} \frac{1}{2^k} = 1$, regardless of the number of stages, the rendering time is bounded to double the rendering time of the final stage.
 
 The fractal rendering is trivially parallelizable, since every pixel color can be computed independently of each other. The renderer maintains a thread pool sharing the work at every stage by rendering a fraction of the stage's pixels. Every animation frame, the canvas pauses the threads execution and interleaves their pixel buffers onto the canvas buffer to smoothly display progress.
 
@@ -56,7 +66,7 @@ The fractal rendering is trivially parallelizable, since every pixel color can b
 
 ## Limitations
 
-The iterator uses `f64` to compute the complex series, which leads to numerical precision issues for deep zoom levels. Typically after a zoom multiplier of $10^15$, numerical limits start to degrade the renders
+The iterator uses `f64` to compute the complex series, which leads to numerical precision issues for deep zoom levels. Typically after a zoom multiplier of $10^{15}$, numerical limits start to degrade the renders
 
 <img src="https://raw.githubusercontent.com/BertrandBev/fractal/master/doc/images/f64.png" width="60%">
 
