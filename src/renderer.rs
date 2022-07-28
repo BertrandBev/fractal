@@ -3,6 +3,7 @@ use crate::image_utils::{IPoint, RGB};
 use crate::time::Instant;
 use druid::kurbo::Circle;
 use druid::{Point, Size};
+use num_cpus;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -151,14 +152,14 @@ impl RendererThread {
                 let rgb = color_scheme(&res);
                 buf[k] = rgb;
 
-                // let x = x - size.x / 2;
-                // let y = y - size.y / 2;
-                // if (x * x + y * y) < size.y * size.y / 5 {
-                //     // if y < size.y / 2 && x < size.x /  2{
+                // Benchmark
+                // thread::sleep(Duration::from_micros(4 * (4 - input.stage as u64).pow(2)));
+                // let x = x - size.width as usize / 2;
+                // let y = y - size.height as usize / 2;
+                // buf[k] = RGB::BLACK;
+                // if (x * x + y * y) < (size.width * size.height) as usize / 6 {
                 //     buf[k] = RGB::rand();
                 // }
-
-                // buf[k] = RGB::rand()
             }
         }
         // Now append that batch
@@ -269,7 +270,9 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new() -> Self {
-        let thread_count = 1;
+        let thread_count = num_cpus::get();
+        println!("Starting {} threads", thread_count);
+
         // Create threads
         let mut threads: Vec<RendererThread> = Vec::new();
         for id in 0..thread_count {
