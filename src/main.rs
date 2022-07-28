@@ -37,8 +37,9 @@ pub fn build_gui() -> impl Widget<FractalData> {
         });
     let label = Label::new(|data: &FractalData, _: &_| data.zoom_factor_str());
 
-    let font = FontDescriptor::new(FontFamily::MONOSPACE).with_style(FontStyle::Italic);
+    let font = FontDescriptor::new(FontFamily::SANS_SERIF).with_style(FontStyle::Italic);
     let credits = Label::new("fractal.rs by bbev")
+        .with_text_size(10.)
         .with_text_color(Color::WHITE.with_alpha(0.5))
         .with_font(font);
 
