@@ -10,11 +10,11 @@ A multithreaded fractal renderer in Rust
 
 ## Online release
 
-The live wasm-compiled release is accessible [here](https://bertrandbev.github.io/fractal/). Due to some rust wasm compiler limitations, that web version is single threaded and therefore slower than native desktop 
+The live wasm-compiled release is accessible [here](https://bertrandbev.github.io/fractal/). Due to some rust wasm compiler limitations, the web version is single threaded and therefore slower than the native version
 
 ## How to run
 
-Navigate to the cloned folder and execute
+Navigate to the cloned repo and execute
 
 ```bash
 cargo run --release
@@ -58,7 +58,11 @@ loop {
 
 ## Mutlistage multithreaded renderer
 
-For deep zoom levels, the number of iterations has to be increased to maintain an appropriate level of details, which makes for slower rendering time and reduces the exploration smoothness. Multistage rendering works by splitting up a rendering task in $n$ stages, each of which doubles the rendering area up to the screen size. The time required to render the $n^{th}$ stage is $\frac{1}{2^n}$ the time it takes to render the full screen size. Since $\sum_{k=1}^{\inf} \frac{1}{2^k} = 1$, regardless of the number of stages, the rendering time is bounded to double the rendering time of the final stage.
+For deep zoom levels, the number of iterations has to be increased to maintain an appropriate level of details, which makes for slower rendering time and reduces the exploration smoothness. Multistage rendering works by splitting up a rendering task in $n$ stages, each of which doubles the rendering area up to the screen size. The time required to render the $n^{th}$ stage is $\frac{1}{2^n}$ the time it takes to render the full screen size. Since:
+
+$$\sum_{k=1}^{\inf} \frac{1}{2^k} = 1$$
+
+Regardless of the number of stages, the rendering time is bounded to double the rendering time of the final stage.
 
 The fractal rendering is trivially parallelizable, since every pixel color can be computed independently of each other. The renderer maintains a thread pool sharing the work at every stage by rendering a fraction of the stage's pixels. Every animation frame, the canvas pauses the threads execution and interleaves their pixel buffers onto the canvas buffer to smoothly display progress.
 
