@@ -10,11 +10,11 @@ A multithreaded fractal renderer in Rust
 
 ## Online release
 
-The live wasm-compiled release is accessible [here](https://bertrandbev.github.io/fractal/). Due to some rust wasm compiler limitations, that web version is single threaded and therefore slower than native desktop 
+The live wasm-compiled release is accessible [here](https://bertrandbev.github.io/fractal/). Due to some rust wasm compiler limitations, the web version is single threaded and therefore slower than the native version
 
 ## How to run
 
-Navigate to the cloned folder and execute
+Navigate to the cloned repo and execute
 
 ```bash
 cargo run --release

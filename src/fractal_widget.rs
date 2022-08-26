@@ -108,6 +108,12 @@ impl FractalWidget {
     }
 }
 
+fn swap(a: &mut f64, b: &mut f64) {
+    let _b = *b;
+    *b = *a;
+    *a = _b;
+}
+
 impl Widget<FractalData> for FractalWidget {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut FractalData, _env: &Env) {
         match event {
@@ -120,9 +126,7 @@ impl Widget<FractalData> for FractalWidget {
                 ctx.request_paint();
             }
             Event::KeyDown(key_event) => {
-                println!("key event {:?}", key_event);
                 if key_event.code == Code::ShiftLeft || key_event.code == Code::ShiftRight {
-                    println!("set drag center");
                     self.drag_center = Option::Some(data.focus.center);
                 }
             }
@@ -154,6 +158,12 @@ impl Widget<FractalData> for FractalWidget {
                 ctx.set_active(false);
                 if self.drag_center.is_none() {
                     // Update selection
+                    if data.selection.x1 < data.selection.x0 {
+                        swap(&mut data.selection.x0, &mut data.selection.x1);
+                    }
+                    if data.selection.y1 < data.selection.y0 {
+                        swap(&mut data.selection.y0, &mut data.selection.y1);
+                    }
                     if data.selection.area() < 4. {
                         let point = IPoint {
                             x: data.selection.x0 as usize,
@@ -165,7 +175,6 @@ impl Widget<FractalData> for FractalWidget {
                     }
                 }
                 // Cancel drag
-                println!("clear drag center");
                 self.drag_center = None;
                 // Clear image
                 self.image.fill(RGB::TRANSPARENT);

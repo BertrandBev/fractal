@@ -229,13 +229,12 @@ impl RendererThread {
         // Populate image
         let mut data = self.data.lock().unwrap();
         let size = Self::current_size(&data);
-        // println!("w {} h {}", w, h);
         if image.len() != size.x * size.y {
             // Mismatched length
             return;
         }
         let mut batch_idx = 0;
-        while (batch_idx < data.batch_idx) {
+        while batch_idx < data.batch_idx {
             let stage = data.input.stage;
             let idx = (self.thread_count * batch_idx + data.id) * BATCH;
             let buffer = &mut data.buffers[stage];
@@ -308,7 +307,6 @@ impl Renderer {
     pub fn update(&mut self, image: &mut Vec<RGB>) -> RendererResult {
         // Resize image if needed
         let mut size = RendererThread::stage_size(&self.size, self.stage);
-        // println!("{:?}", size);
         image.resize(size.x * size.y, RGB::TRANSPARENT);
         // Retrieve image if needed
         for thread in self.threads.iter_mut() {

@@ -1,4 +1,3 @@
-mod color_picker;
 mod fractal;
 mod fractal_widget;
 mod image_utils;
@@ -68,8 +67,7 @@ pub fn build_gui() -> impl Widget<FractalData> {
     // .with_child(button)
 }
 
-// This wrapper function is the primary modification we're making to the vanilla
-// hello.rs example.
+// Wasm wrapper
 #[wasm_bindgen]
 pub fn wasm_main() {
     // This hook is necessary to get panic messages in the console
